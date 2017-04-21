@@ -1,0 +1,45 @@
+QoS: Add pm_qos_cancel_request_lazy() that doesn't sleep
+which is convenient for contexts that may not sleep.
+
+diff -ru linux-4.9.13-clean/include/linux/pm_qos.h linux-4.9.13-patch/include/linux/pm_qos.h
+--- linux-4.9.13-clean/include/linux/pm_qos.h	2017-02-26 05:11:18.000000000 -0500
++++ linux-4.9.13-patch/include/linux/pm_qos.h	2017-04-21 15:06:39.038217636 -0400
+@@ -126,6 +126,8 @@
+ 			   s32 new_value);
+ void pm_qos_update_request_timeout(struct pm_qos_request *req,
+ 				   s32 new_value, unsigned long timeout_us);
++void pm_qos_cancel_request_lazy(struct pm_qos_request *req,
++				unsigned int timeout_us);
+ void pm_qos_remove_request(struct pm_qos_request *req);
+ 
+ int pm_qos_request(int pm_qos_class);
+diff -ru linux-4.9.13-clean/kernel/power/qos.c linux-4.9.13-patch/kernel/power/qos.c
+--- linux-4.9.13-clean/kernel/power/qos.c	2017-02-26 05:11:18.000000000 -0500
++++ linux-4.9.13-patch/kernel/power/qos.c	2017-04-21 15:06:39.038217636 -0400
+@@ -526,6 +526,26 @@
+ }
+ 
+ /**
++ * pm_qos_cancel_request_lazy - cancels an existing qos request lazily.
++ * @req : handle to list element holding a pm_qos request to use
++ * @timeout_us: the delay before cancelling this qos request in usecs.
++ *
++ * After timeout_us, this qos request is cancelled.
++ */
++void pm_qos_cancel_request_lazy(struct pm_qos_request *req,
++				unsigned int timeout_us)
++{
++	if (!req)
++		return;
++	if (WARN(!pm_qos_request_active(req),
++		 "%s called for unknown object.", __func__))
++		return;
++
++	schedule_delayed_work(&req->work, usecs_to_jiffies(timeout_us));
++}
++EXPORT_SYMBOL_GPL(pm_qos_cancel_request_lazy);
++
++/**
+  * pm_qos_remove_request - modifies an existing qos request
+  * @req: handle to request list element
+  *

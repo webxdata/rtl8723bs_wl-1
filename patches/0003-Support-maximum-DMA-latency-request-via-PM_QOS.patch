@@ -1,0 +1,156 @@
+ mmc: sdhci: Support maximum DMA latency request via PM_QOS
+
+Add support for setting a maximum DMA latency via the PM QOS framework.
+
+Drivers can set host->dma_latency to the desired value otherwise the initial value
+(PM_QOS_DEFAULT_VALUE) will result in no PM QOS request being added.
+
+It may be that there isn't time between consecutive I/O requests to reach deeper
+C-states. To address that the driver can set host->lat_cancel_delay which is the
+delay before cancelling the DMA latency request when it is known that there is
+another request on the way.
+
+
+diff -ru linux-4.9.13-clean/drivers/mmc/host/sdhci.c linux-4.9.13-patch/drivers/mmc/host/sdhci.c
+--- linux-4.9.13-clean/drivers/mmc/host/sdhci.c	2017-02-26 05:11:18.000000000 -0500
++++ linux-4.9.13-patch/drivers/mmc/host/sdhci.c	2017-04-21 15:07:21.401450880 -0400
+@@ -748,6 +748,45 @@
+ 	}
+ }
+ 
++static bool sdhci_pm_qos_use_dma_latency(struct sdhci_host *host)
++{
++	return host->dma_latency != PM_QOS_DEFAULT_VALUE;
++}
++
++static void sdhci_pm_qos_set_dma_latency(struct sdhci_host *host,
++					 struct mmc_request *mrq)
++{
++	if (sdhci_pm_qos_use_dma_latency(host) && mrq->data &&
++	    (host->flags & (SDHCI_USE_SDMA | SDHCI_USE_ADMA))) {
++		pm_qos_update_request(&host->pm_qos_req, host->dma_latency);
++		host->pm_qos_set = true;
++	}
++}
++
++static void sdhci_pm_qos_unset(struct sdhci_host *host)
++{
++	unsigned int delay;
++
++	if (host->pm_qos_set) {
++		host->pm_qos_set = false;
++		delay = host->consecutive_req ? host->lat_cancel_delay : 0;
++		pm_qos_cancel_request_lazy(&host->pm_qos_req, delay);
++	}
++}
++
++static void sdhci_pm_qos_add(struct sdhci_host *host)
++{
++	if (sdhci_pm_qos_use_dma_latency(host))
++		pm_qos_add_request(&host->pm_qos_req, PM_QOS_CPU_DMA_LATENCY,
++				   PM_QOS_DEFAULT_VALUE);
++}
++
++static void sdhci_pm_qos_remove(struct sdhci_host *host)
++{
++	if (pm_qos_request_active(&host->pm_qos_req))
++		pm_qos_remove_request(&host->pm_qos_req);
++}
++
+ static void sdhci_prepare_data(struct sdhci_host *host, struct mmc_command *cmd)
+ {
+ 	u8 ctrl;
+@@ -1485,6 +1524,8 @@
+ 
+ 	host = mmc_priv(mmc);
+ 
++	sdhci_pm_qos_set_dma_latency(host, mrq);
++
+ 	/* Firstly check card presence */
+ 	present = mmc->ops->get_cd(mmc);
+ 
+@@ -2225,7 +2266,12 @@
+ {
+ 	struct sdhci_host *host = mmc_priv(mmc);
+ 
+-	mrq->data->host_cookie = COOKIE_UNMAPPED;
++	host->consecutive_req = 1;
++
++	if (mrq->data->host_cookie) {
++		mrq->data->host_cookie = COOKIE_UNMAPPED;
++		return;
++	}
+ 
+ 	if (host->flags & SDHCI_REQ_USE_DMA)
+ 		sdhci_pre_dma_transfer(host, mrq->data, COOKIE_PRE_MAPPED);
+@@ -2308,6 +2354,8 @@
+ 	struct mmc_request *mrq;
+ 	int i;
+ 
++	sdhci_pm_qos_unset(host);
++
+ 	spin_lock_irqsave(&host->lock, flags);
+ 
+ 	for (i = 0; i < SDHCI_MAX_MRQS; i++) {
+@@ -2991,6 +3039,8 @@
+ 	host = mmc_priv(mmc);
+ 	host->mmc = mmc;
+ 	host->mmc_host_ops = sdhci_ops;
++	host->dma_latency = PM_QOS_DEFAULT_VALUE;
++
+ 	mmc->ops = &host->mmc_host_ops;
+ 
+ 	host->flags = SDHCI_SIGNALING_330;
+@@ -3487,6 +3537,8 @@
+ 
+ 	spin_lock_init(&host->lock);
+ 
++	sdhci_pm_qos_add(host);
++
+ 	/*
+ 	 * Maximum number of segments. Depends on if the hardware
+ 	 * can do scatter/gather or not.
+@@ -3622,6 +3674,7 @@
+ 	free_irq(host->irq, host);
+ untasklet:
+ 	tasklet_kill(&host->finish_tasklet);
++	sdhci_pm_qos_remove(host);
+ 
+ 	if (!IS_ERR(mmc->supply.vqmmc))
+ 		regulator_disable(mmc->supply.vqmmc);
+@@ -3696,6 +3749,8 @@
+ 
+ 	host->adma_table = NULL;
+ 	host->align_buffer = NULL;
++
++	sdhci_pm_qos_remove(host);
+ }
+ 
+ EXPORT_SYMBOL_GPL(sdhci_remove_host);
+
+===================================================================
+
+diff -ru linux-4.9.13-clean/drivers/mmc/host/sdhci.h linux-4.9.13-patch/drivers/mmc/host/sdhci.h
+--- linux-4.9.13-clean/drivers/mmc/host/sdhci.h	2017-02-26 05:11:18.000000000 -0500
++++ linux-4.9.13-patch/drivers/mmc/host/sdhci.h	2017-04-21 15:07:21.401450880 -0400
+@@ -19,6 +19,7 @@
+ #include <linux/io.h>
+ 
+ #include <linux/mmc/host.h>
++#include <linux/pm_qos.h>
+ 
+ /*
+  * Controller registers
+@@ -436,6 +437,12 @@
+ 	struct mmc_host_ops mmc_host_ops;	/* MMC host ops */
+ 	u64 dma_mask;		/* custom DMA mask */
+ 
++	struct pm_qos_request pm_qos_req;
++	int dma_latency;
++	int lat_cancel_delay;
++	int consecutive_req;
++	bool pm_qos_set;
++
+ #if IS_ENABLED(CONFIG_LEDS_CLASS)
+ 	struct led_classdev led;	/* LED control */
+ 	char led_name[32];

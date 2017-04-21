@@ -1,0 +1,26 @@
+mmc: sdhci: Disable runtime pm when the sdio_irq is enabled
+SDIO cards may need clock to send the card interrupt to the host
+
+diff -ru linux-4.9.13-clean/drivers/mmc/host/sdhci.c linux-4.9.13-patch/drivers/mmc/host/sdhci.c
+--- linux-4.9.13-clean/drivers/mmc/host/sdhci.c	2017-02-26 05:11:18.000000000 -0500
++++ linux-4.9.13-patch/drivers/mmc/host/sdhci.c	2017-04-21 15:07:21.401450880 -0400
+@@ -1821,6 +1862,9 @@
+ 	struct sdhci_host *host = mmc_priv(mmc);
+ 	unsigned long flags;
+ 
++	if (enable)
++		pm_runtime_get_noresume(host->mmc->parent);
++
+ 	spin_lock_irqsave(&host->lock, flags);
+ 	if (enable)
+ 		host->flags |= SDHCI_SDIO_IRQ_ENABLED;
+@@ -1829,6 +1873,9 @@
+ 
+ 	sdhci_enable_sdio_irq_nolock(host, enable);
+ 	spin_unlock_irqrestore(&host->lock, flags);
++
++	if (!enable)
++		pm_runtime_put_noidle(host->mmc->parent);
+ }
+ 
+ static int sdhci_start_signal_voltage_switch(struct mmc_host *mmc,
