@@ -6,12 +6,26 @@ Tested on:
 
 The BayTrail SDIO drivers require patches under the 4.9 Linux kernel.
 
+### Patches
+Verified against Linux kernel 4.9.13
 Current dirver includes required patches:
-- patches/ verified against Linux kernel 4.9.13
+- patches/
+  - 0001-Add-pm_qos_cancel_request_lazy.patch
+  - 0002-Disable-runtime-pm-when-sdio_irq-is-enabled.patch
+  - 0003-Support-maximum-DMA-latency-request-via-PM_QOS.patch
+  - 0004-Fix-device-hang-on-Intel-BayTrail.patch
 
 
-## Install
+### Firmware
+Verified against Linux kernel 4.9.13
+Current dirver includes required firmwares:
+- firmware/
+  - rtl8723bs_ap_wowlan.bin
+  - rtl8723bs_bt.bin
+  - rtl8723bs_nic.bin
+  - rtl8723bs_wowlan.bin
 
+### Install
 ```
  make
  sudo make install
