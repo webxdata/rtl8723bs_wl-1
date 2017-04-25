@@ -1,4 +1,4 @@
-# rtl8723bs
+# RTL8723BS Wi-Fi
 Realtek SDIO Wi-Fi driver
 
 Tested on:
@@ -20,10 +20,11 @@ Current dirver includes required patches:
 Verified against Linux kernel 4.9.13
 Current dirver includes required firmwares:
 - firmware/
-  - rtl8723bs_ap_wowlan.bin
-  - rtl8723bs_bt.bin
+  - rtl8723bs_ap_wowlan.bin		*[Unused in current configuration]*
+  - rtl8723bs_bt.bin				*[Unused as device uses rtk_hciattach driver]*
   - rtl8723bs_nic.bin
-  - rtl8723bs_wowlan.bin
+  - rtl8723bs_wowlan.bin		*[Unused as device does not support Wake on LAN]*
+
 
 ### Install
 ```
