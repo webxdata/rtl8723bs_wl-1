@@ -203,8 +203,8 @@ strip:
 install:
 	install -p -m 644 $(MODULE_NAME).ko  $(MODDESTDIR)
 	@mkdir -p /lib/firmware/rtlwifi/
-	@cp -n rtl8723bs_nic.bin /lib/firmware/rtlwifi/rtl8723bs_nic.bin
-	@cp -n rtl8723bs_wowlan.bin /lib/firmware/rtlwifi/rtl8723bs_wowlan.bin
+	@cp -n firmware/rtl8723bs_nic.bin /lib/firmware/rtlwifi/rtl8723bs_nic.bin
+	@cp -n firmware/rtl8723bs_wowlan.bin /lib/firmware/rtlwifi/rtl8723bs_wowlan.bin
 	/sbin/depmod -a ${KVER}
 
 uninstall:
