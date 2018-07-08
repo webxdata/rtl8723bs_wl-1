@@ -3,7 +3,7 @@ Realtek SDIO Wi-Fi driver
 
 Tested on:
 - Intel Compute Stick STCK1A8LFC
-- Alfawise X5 (Debian 9 kernel 4.9)
+- Alfawise X5 (Debian 9, kernel 4.9.0-6)
 
 The BayTrail SDIO drivers require patches under the 4.9 Linux kernel.
 
